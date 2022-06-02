@@ -1,0 +1,13 @@
+{
+  "name": "webman/log",
+  "type": "library",
+  "license": "MIT",
+  "description": "Webman plugin webman/log",
+  "require": {
+  },
+  "autoload": {
+    "psr-4": {
+      "Webman\\Log\\": "src"
+    }
+  }
+}
