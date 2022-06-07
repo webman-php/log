@@ -26,6 +26,9 @@ class Middleware implements MiddlewareInterface
         $start_time = microtime(true);
         $logs = $request->getRealIp() . ' ' . $request->method() . ' ' . trim($request->fullUrl(), '/');
         $this->sqlLogs = '';
+        if (class_exists(\think\facade\Db::class)) {
+            \think\facade\Db::getDbLog(true);
+        }
         if (!$initialized) {
             if (class_exists(QueryExecuted::class)) {
                 Db::listen(function (QueryExecuted $query) {
