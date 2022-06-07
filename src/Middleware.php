@@ -51,9 +51,8 @@ class Middleware implements MiddlewareInterface
         }
 
         $response = $next($request);
-
-        $time_diff = substr(microtime(true) - $start_time, 0, 7);
-        $logs .= " [{$time_diff}s] [webman/log]\n";
+        $time_diff = substr((microtime(true) - $start_time)*1000, 0, 7);
+        $logs .= " [{$time_diff}ms] [webman/log]\n";
         if ($request->method() === 'POST') {
             $logs .= "[POST] " . var_export($request->post(), true) . "\n";
         }
