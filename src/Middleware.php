@@ -1,4 +1,5 @@
 <?php
+
 namespace Webman\Log;
 
 use Illuminate\Database\Events\QueryExecuted;
@@ -20,7 +21,7 @@ class Middleware implements MiddlewareInterface
      * @param callable $next
      * @return Response
      */
-    public function process(Request $request, callable $next) : Response
+    public function process(Request $request, callable $next): Response
     {
         static $initialized;
         $start_time = microtime(true);
@@ -36,7 +37,7 @@ class Middleware implements MiddlewareInterface
                     if (strtolower($sql) === 'select 1') {
                         return;
                     }
-                    $sql = str_replace("?", "'%s'", $sql);
+                    $sql = str_replace("?", "%s", $sql);
                     foreach ($query->bindings as $i => $binding) {
                         if ($binding instanceof \DateTime) {
                             $query->bindings[$i] = $binding->format('\'Y-m-d H:i:s\'');
@@ -47,14 +48,14 @@ class Middleware implements MiddlewareInterface
                         }
                     }
                     $log = vsprintf($sql, $query->bindings);
-                    $this->sqlLogs .= "[SQL] $log [" . ($query->time/1000) . "s]\n";
+                    $this->sqlLogs .= "[SQL] $log [" . ($query->time / 1000) . "s]\n";
                 });
             }
             $initialized = true;
         }
 
         $response = $next($request);
-        $time_diff = substr((microtime(true) - $start_time)*1000, 0, 7);
+        $time_diff = substr((microtime(true) - $start_time) * 1000, 0, 7);
         $logs .= " [{$time_diff}ms] [webman/log]\n";
         if ($request->method() === 'POST') {
             $logs .= "[POST] " . var_export($request->post(), true) . "\n";
@@ -79,5 +80,4 @@ class Middleware implements MiddlewareInterface
 
         return $response;
     }
-    
 }
