@@ -1,19 +1,21 @@
 <?php
 namespace Webman\Log;
 
-use Illuminate\Database\Events\QueryExecuted;
 use support\Db;
 use support\Log;
+use support\Redis;
 use Webman\Http\Request;
 use Webman\Http\Response;
 use Webman\MiddlewareInterface;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Redis\Events\CommandExecuted;
 
 class Middleware implements MiddlewareInterface
 {
     /**
      * @var string
      */
-    public $sqlLogs = '';
+    public $logs = '';
 
     /**
      * @param Request $request
@@ -25,30 +27,47 @@ class Middleware implements MiddlewareInterface
         static $initialized;
         $start_time = microtime(true);
         $logs = $request->getRealIp() . ' ' . $request->method() . ' ' . trim($request->fullUrl(), '/');
-        $this->sqlLogs = '';
+        $this->logs = '';
         if (class_exists(\think\facade\Db::class)) {
             \think\facade\Db::getDbLog(true);
         }
         if (!$initialized) {
             if (class_exists(QueryExecuted::class)) {
-                Db::listen(function (QueryExecuted $query) {
-                    $sql = trim($query->sql);
-                    if (strtolower($sql) === 'select 1') {
-                        return;
-                    }
-                    $sql = str_replace("?", "'%s'", $sql);
-                    foreach ($query->bindings as $i => $binding) {
-                        if ($binding instanceof \DateTime) {
-                            $query->bindings[$i] = $binding->format('\'Y-m-d H:i:s\'');
-                        } else {
-                            if (is_string($binding)) {
-                                $query->bindings[$i] = "'$binding'";
+                foreach (config('database.connections', []) as $key => $config) {
+                    $driver = $config['driver'] ?? 'mysql';
+                    try {
+                        Db::connection($key)->listen(function (QueryExecuted $query) use ($key, $driver) {
+                            $sql = trim($query->sql);
+                            if (strtolower($sql) === 'select 1') {
+                                return;
                             }
-                        }
+                            $sql = str_replace("?", "%s", $sql);
+                            foreach ($query->bindings as $i => $binding) {
+                                if ($binding instanceof \DateTime) {
+                                    $query->bindings[$i] = $binding->format("'Y-m-d H:i:s'");
+                                } else {
+                                    if (is_string($binding)) {
+                                        $query->bindings[$i] = "'$binding'";
+                                    }
+                                }
+                            }
+                            $log = vsprintf($sql, $query->bindings);
+                            $this->logs .= "[SQL] [driver:$driver] [connection:$key] $log [{$query->time} ms]\r\n";
+                        });
+                    } catch (\Throwable $e) {}
+                }
+            }
+            if (class_exists(CommandExecuted::class)) {
+                foreach (config('redis', []) as $key => $config) {
+                    if (strpos($key, 'redis-queue') !== false) {
+                        continue;
                     }
-                    $log = vsprintf($sql, $query->bindings);
-                    $this->sqlLogs .= "[SQL] $log [" . ($query->time/1000) . "s]\n";
-                });
+                    try {
+                        Redis::connection($key)->listen(function (CommandExecuted $command) use ($key) {
+                            $this->logs .= "[Redis] [connection:$key] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)\r\n";
+                        });
+                    } catch (\Throwable $e) {}
+                }
             }
             $initialized = true;
         }
@@ -59,7 +78,7 @@ class Middleware implements MiddlewareInterface
         if ($request->method() === 'POST') {
             $logs .= "[POST] " . var_export($request->post(), true) . "\n";
         }
-        $logs .= $this->sqlLogs;
+        $logs .= $this->logs;
 
         if (class_exists(\think\facade\Db::class)) {
             $sql_logs = \think\facade\Db::getDbLog(true);
