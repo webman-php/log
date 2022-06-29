@@ -50,7 +50,7 @@ class Middleware implements MiddlewareInterface
                             }
                         }
                         $log = vsprintf($sql, $query->bindings);
-                        $this->logs .= "[SQL] [connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
+                        $this->logs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
                     });
                 } catch (\Throwable $e) {echo $e;}
             }
@@ -61,7 +61,7 @@ class Middleware implements MiddlewareInterface
                     }
                     try {
                         Redis::connection($key)->listen(function (CommandExecuted $command) {
-                            $this->logs .= "[Redis] [connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
+                            $this->logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                         });
                     } catch (\Throwable $e) {}
                 }
@@ -73,7 +73,7 @@ class Middleware implements MiddlewareInterface
         $time_diff = substr((microtime(true) - $start_time)*1000, 0, 7);
         $logs .= " [{$time_diff}ms] [webman/log]" . PHP_EOL;
         if ($request->method() === 'POST') {
-            $logs .= "[POST] " . var_export($request->post(), true) . PHP_EOL;
+            $logs .= "[POST]\t" . var_export($request->post(), true) . PHP_EOL;
         }
         $logs .= $this->logs;
 
@@ -81,7 +81,7 @@ class Middleware implements MiddlewareInterface
             $sql_logs = \think\facade\Db::getDbLog(true);
             if (!empty($sql_logs['sql'])) {
                 foreach ($sql_logs['sql'] as $sql) {
-                    $logs .= '[SQL] ' . trim($sql) . PHP_EOL;
+                    $logs .= "[SQL]\t" . trim($sql) . PHP_EOL;
                 }
             }
         }
