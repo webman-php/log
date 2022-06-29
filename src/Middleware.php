@@ -33,29 +33,26 @@ class Middleware implements MiddlewareInterface
         }
         if (!$initialized) {
             if (class_exists(QueryExecuted::class)) {
-                foreach (config('database.connections', []) as $key => $config) {
-                    $driver = $config['driver'] ?? 'mysql';
-                    try {
-                        Db::connection($key)->listen(function (QueryExecuted $query) use ($key, $driver) {
-                            $sql = trim($query->sql);
-                            if (strtolower($sql) === 'select 1') {
-                                return;
-                            }
-                            $sql = str_replace("?", "%s", $sql);
-                            foreach ($query->bindings as $i => $binding) {
-                                if ($binding instanceof \DateTime) {
-                                    $query->bindings[$i] = $binding->format("'Y-m-d H:i:s'");
-                                } else {
-                                    if (is_string($binding)) {
-                                        $query->bindings[$i] = "'$binding'";
-                                    }
+                try {
+                    Db::listen(function (QueryExecuted $query) {
+                        $sql = trim($query->sql);
+                        if (strtolower($sql) === 'select 1') {
+                            return;
+                        }
+                        $sql = str_replace("?", "%s", $sql);
+                        foreach ($query->bindings as $i => $binding) {
+                            if ($binding instanceof \DateTime) {
+                                $query->bindings[$i] = $binding->format("'Y-m-d H:i:s'");
+                            } else {
+                                if (is_string($binding)) {
+                                    $query->bindings[$i] = "'$binding'";
                                 }
                             }
-                            $log = vsprintf($sql, $query->bindings);
-                            $this->logs .= "[SQL] [driver:$driver] [connection:$key] $log [{$query->time} ms]\r\n";
-                        });
-                    } catch (\Throwable $e) {}
-                }
+                        }
+                        $log = vsprintf($sql, $query->bindings);
+                        $this->logs .= "[SQL] [connection:{$query->connectionName}] $log [{$query->time} ms]\r\n";
+                    });
+                } catch (\Throwable $e) {echo $e;}
             }
             if (class_exists(CommandExecuted::class)) {
                 foreach (config('redis', []) as $key => $config) {
@@ -63,8 +60,8 @@ class Middleware implements MiddlewareInterface
                         continue;
                     }
                     try {
-                        Redis::connection($key)->listen(function (CommandExecuted $command) use ($key) {
-                            $this->logs .= "[Redis] [connection:$key] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)\r\n";
+                        Redis::connection($key)->listen(function (CommandExecuted $command) {
+                            $this->logs .= "[Redis] [connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)\r\n";
                         });
                     } catch (\Throwable $e) {}
                 }
