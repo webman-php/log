@@ -61,6 +61,11 @@ class Middleware implements MiddlewareInterface
                     }
                     try {
                         Redis::connection($key)->listen(function (CommandExecuted $command) {
+                            foreach ($command->parameters as &$item) {
+                                if (is_array($item)) {
+                                    $item = implode('\', \'', $item);
+                                }
+                            }
                             $this->logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                         });
                     } catch (\Throwable $e) {}
