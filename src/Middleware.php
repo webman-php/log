@@ -9,6 +9,7 @@ use Webman\Http\Response;
 use Webman\MiddlewareInterface;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Redis\Events\CommandExecuted;
+use Throwable;
 
 class Middleware implements MiddlewareInterface
 {
@@ -91,7 +92,14 @@ class Middleware implements MiddlewareInterface
             }
         }
 
-        if (method_exists($response, 'exception') && $exception = $response->exception()) {
+        $exception = $response->exception();
+
+        if (
+            $exception
+            && config('plugin.webman.log.app.exception.enable')
+            && method_exists($response, 'exception')
+            && !$this->shouldntReport($exception)
+        ) {
             $logs .= $exception;
             Log::error($logs);
         } else {
@@ -100,5 +108,18 @@ class Middleware implements MiddlewareInterface
 
         return $response;
     }
-    
+
+    /**
+     * @param Throwable $e
+     * @return bool
+     */
+    protected function shouldntReport($e) {
+        foreach (config('plugin.webman.log.app.exception.dontReport') as $type) {
+            if ($e instanceof $type) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
