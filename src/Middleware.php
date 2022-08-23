@@ -92,14 +92,11 @@ class Middleware implements MiddlewareInterface
             }
         }
 
-        $exception = $response->exception();
-
-        if (
-            $exception
-            && config('plugin.webman.log.app.exception.enable')
-            && method_exists($response, 'exception')
-            && !$this->shouldntReport($exception)
-        ) {
+        $exception = null;
+        if (method_exists($response, 'exception')) {
+            $exception = $response->exception();
+        }
+        if (config('plugin.webman.log.app.exception.enable') && $exception && !$this->shouldntReport($exception)) {
             $logs .= $exception;
             Log::error($logs);
         } else {
