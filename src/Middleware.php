@@ -105,7 +105,7 @@ class Middleware implements MiddlewareInterface
 
         $method = 'info';
 
-        if ($exception && config('plugin.webman.log.app.exception.enable') && !$this->shouldntReport($exception)) {
+        if ($exception && config('plugin.webman.log.app.exception.enable', true) && !$this->shouldntReport($exception)) {
             $logs .= $exception . PHP_EOL;
             $method = 'error';
         }
@@ -137,7 +137,7 @@ class Middleware implements MiddlewareInterface
      * @return bool
      */
     protected function shouldntReport($e) {
-        foreach (config('plugin.webman.log.app.exception.dontReport') as $type) {
+        foreach (config('plugin.webman.log.app.exception.dontReport', []) as $type) {
             if ($e instanceof $type) {
                 return true;
             }
