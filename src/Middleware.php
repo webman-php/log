@@ -7,16 +7,18 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Redis\Events\CommandExecuted;
+use Webman\Http\Request;
+use Webman\Http\Response;
+use Webman\MiddlewareInterface;
+use Throwable;
+use RuntimeException;
 use support\Db;
 use support\Log;
 use support\Redis;
 use think\db\connector\Mysql;
+use think\DbManager;
 use think\facade\Db as ThinkDb;
-use Throwable;
-use Webman\Http\Request;
-use Webman\Http\Response;
-use Webman\MiddlewareInterface;
-use RuntimeException;
+use think\Container as ThinkContainer;
 
 class Middleware implements MiddlewareInterface
 {
@@ -85,10 +87,10 @@ class Middleware implements MiddlewareInterface
         }
 
         // 判断Db是否有未提交的事务
-        $has_uncommited_transaction = false;
+        $has_uncommitted_transaction = false;
         if (class_exists(Connection::class, false)) {
-            if ($log = $this->checkDbUncommitTransaction()) {
-                $has_uncommited_transaction = true;
+            if ($log = $this->checkDbUncommittedTransaction()) {
+                $has_uncommitted_transaction = true;
                 $method = 'error';
                 $logs .= $log;
             }
@@ -96,8 +98,8 @@ class Middleware implements MiddlewareInterface
 
         // 判断think-orm是否有未提交的事务
         if ($loaded_think_db) {
-            if ($log = $this->checkTpUncommitTransaction()) {
-                $has_uncommited_transaction = true;
+            if ($log = $this->checkTpUncommittedTransaction()) {
+                $has_uncommitted_transaction = true;
                 $method = 'error';
                 $logs .= $log;
             }
@@ -114,7 +116,7 @@ class Middleware implements MiddlewareInterface
 
         call_user_func([Log::class, $method], $logs);
 
-        if ($has_uncommited_transaction) {
+        if ($has_uncommitted_transaction) {
             throw new RuntimeException('Uncommitted transactions found');
         }
 
@@ -161,31 +163,35 @@ class Middleware implements MiddlewareInterface
     /**
      * 尝试初始化redis日志监听
      *
-     * @return void
+     * @return array
      */
-    protected function tryInitRedisListen()
+    protected function tryInitRedisListen(): array
     {
         static $listened_names = [];
         if (!class_exists(CommandExecuted::class)) {
             return [];
         }
         $new_names = [];
-        foreach (Redis::instance()->connections() ?: [] as $connection) {
-            /* @var \Illuminate\Redis\Connections\Connection $connection */
-            $name = $connection->getName();
-            if (isset($listened_names[$name])) {
-                continue;
-            }
-            $connection->listen(function (CommandExecuted $command) {
-                foreach ($command->parameters as &$item) {
-                    if (is_array($item)) {
-                        $item = implode('\', \'', $item);
-                    }
+        try {
+            foreach (Redis::instance()->connections() ?: [] as $connection) {
+                /* @var \Illuminate\Redis\Connections\Connection $connection */
+                $name = $connection->getName();
+                if (isset($listened_names[$name])) {
+                    continue;
                 }
-                $this->logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
-            });
-            $listened_names[$name] = $name;
-            $new_names[] = $name;
+                $connection->listen(function (CommandExecuted $command) {
+                    foreach ($command->parameters as &$item) {
+                        if (is_array($item)) {
+                            $item = implode('\', \'', $item);
+                        }
+                    }
+                    $this->logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
+                });
+                $listened_names[$name] = $name;
+                $new_names[] = $name;
+            }
+        } catch (Throwable $e) {
+            echo $e;
         }
         return $new_names;
     }
@@ -212,21 +218,23 @@ class Middleware implements MiddlewareInterface
      * 检查Db是否有未提交的事务
      *
      * @return string
-     * @throws Throwable
      */
-    protected function checkDbUncommitTransaction()
+    protected function checkDbUncommittedTransaction(): string
     {
         $logs = '';
-        foreach ($this->getCapsule()->getDatabaseManager()->getConnections() as $connection) {
-            /* @var \Illuminate\Database\MySqlConnection $connection * */
-            if (\in_array($connection->getConfig('driver'), ['mysql', 'pgsql', 'sqlite', 'sqlsrv'])) {
-                $pdo = $connection->getPdo();
-                if ($pdo && $pdo->inTransaction()) {
-                    $connection->rollBack();
-                    $method = 'error';
-                    $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+        try {
+            foreach ($this->getCapsule()->getDatabaseManager()->getConnections() as $connection) {
+                /* @var \Illuminate\Database\MySqlConnection $connection * */
+                if (\in_array($connection->getConfig('driver'), ['mysql', 'pgsql', 'sqlite', 'sqlsrv'])) {
+                    $pdo = $connection->getPdo();
+                    if ($pdo && $pdo->inTransaction()) {
+                        $connection->rollBack();
+                        $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+                    }
                 }
             }
+        } catch (Throwable $e) {
+            echo $e;
         }
         return $logs;
     }
@@ -235,30 +243,37 @@ class Middleware implements MiddlewareInterface
      * 检查think-orm是否有未提交的事务
      *
      * @return string
-     * @throws \ReflectionException
      */
-    protected function checkTpUncommitTransaction()
+    protected function checkTpUncommittedTransaction(): string
     {
-        static $reflect, $instance;
-        if (!$reflect) {
-            $reflect = new \ReflectionClass(\think\facade\Db::class);
-            $property = $reflect->getProperty('instance');
-            $property->setAccessible(true);
-            $instance = $property->getValue();
-            $reflect = new \ReflectionClass($property->getValue());
-        }
-        $property = $reflect->getProperty('instance');
-        $property->setAccessible(true);
-        $instances = $property->getValue($instance);
+        static $property, $manager_instance;
         $logs = '';
-        foreach ($instances as $connection) {
-            /* @var \think\db\connector\Mysql $connection */
-            $pdo = $connection->getPdo();
-            if ($pdo && $pdo->inTransaction()) {
-                $connection->rollBack();
-                $method = 'error';
-                $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+        try {
+            if (!$property) {
+                if (class_exists(ThinkContainer::class, false)) {
+                    $manager_instance = ThinkContainer::getInstance()->make(DbManager::class);
+                } else {
+                    $reflect = new \ReflectionClass(ThinkDb::class);
+                    $property = $reflect->getProperty('instance');
+                    $property->setAccessible(true);
+                    $manager_instance = $property->getValue();
+                }
+                $reflect = new \ReflectionClass($manager_instance);
+                $property = $reflect->getProperty('instance');
+                $property->setAccessible(true);
             }
+
+            $instances = $property->getValue($manager_instance);
+            foreach ($instances as $connection) {
+                /* @var \think\db\connector\Mysql $connection */
+                $pdo = $connection->getPdo();
+                if ($pdo && $pdo->inTransaction()) {
+                    $connection->rollBack();
+                    $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+                }
+            }
+        } catch (Throwable $e) {
+            echo $e;
         }
         return $logs;
     }
@@ -269,7 +284,7 @@ class Middleware implements MiddlewareInterface
      * @param Throwable $e
      * @return bool
      */
-    protected function shouldntReport($e)
+    protected function shouldntReport($e): bool
     {
         foreach (config('plugin.webman.log.app.exception.dontReport', []) as $type) {
             if ($e instanceof $type) {
