@@ -25,7 +25,7 @@ class Middleware implements MiddlewareInterface
     /**
      * @var string
      */
-    public $logs = '';
+    public static $logs = '';
 
     /**
      * @param Request $request
@@ -41,7 +41,7 @@ class Middleware implements MiddlewareInterface
 
         // 记录ip 请求等信息
         $logs = $request->getRealIp() . ' ' . $request->method() . ' ' . trim($request->fullUrl(), '/');
-        $this->logs = '';
+        static::$logs = '';
 
         // 清理think-orm的日志
         if (class_exists(ThinkDb::class, false) && class_exists(Mysql::class, false)) {
@@ -61,7 +61,7 @@ class Middleware implements MiddlewareInterface
         if ($request->method() === 'POST') {
             $logs .= "[POST]\t" . var_export($request->post(), true) . PHP_EOL;
         }
-        $logs .= $this->logs;
+        $logs .= static::$logs;
 
         // think-orm如果被使用，则记录think-orm的日志
         if ($loaded_think_db = (class_exists(ThinkDb::class, false) && class_exists(Mysql::class, false))) {
@@ -135,7 +135,10 @@ class Middleware implements MiddlewareInterface
         }
         try {
             $capsule = $this->getCapsule();
-            $dispatcher = new Dispatcher(new Container);
+            $dispatcher = $capsule->getEventDispatcher();
+            if (!$dispatcher) {
+                $dispatcher = new Dispatcher(new Container);
+            }
             $dispatcher->listen(QueryExecuted::class, function (QueryExecuted $query) {
                 $sql = trim($query->sql);
                 if (strtolower($sql) === 'select 1') {
@@ -155,7 +158,7 @@ class Middleware implements MiddlewareInterface
                 try {
                     $log = vsprintf($sql, $query->bindings);
                 } catch (\Throwable $e) {}
-                $this->logs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
+                static::$logs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
             });
             $capsule->setEventDispatcher($dispatcher);
         } catch (\Throwable $e) {
@@ -188,7 +191,7 @@ class Middleware implements MiddlewareInterface
                             $item = implode('\', \'', $item);
                         }
                     }
-                    $this->logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
+                    static::$logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                 });
                 $listened_names[$name] = $name;
                 $new_names[] = $name;
