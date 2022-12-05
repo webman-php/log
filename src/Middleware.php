@@ -151,7 +151,10 @@ class Middleware implements MiddlewareInterface
                         }
                     }
                 }
-                $log = vsprintf($sql, $query->bindings);
+                $log = $sql;
+                try {
+                    $log = vsprintf($sql, $query->bindings);
+                } catch (\Throwable $e) {}
                 $this->logs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
             });
             $capsule->setEventDispatcher($dispatcher);
