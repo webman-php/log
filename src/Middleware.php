@@ -272,10 +272,12 @@ class Middleware implements MiddlewareInterface
             $instances = $property->getValue($manager_instance);
             foreach ($instances as $connection) {
                 /* @var \think\db\connector\Mysql $connection */
-                $pdo = $connection->getPdo();
-                if ($pdo && $pdo->inTransaction()) {
-                    $connection->rollBack();
-                    $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+                if (method_exists($connection, 'getPdo')) {
+                    $pdo = $connection->getPdo();
+                    if ($pdo && $pdo->inTransaction()) {
+                        $connection->rollBack();
+                        $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
+                    }
                 }
             }
         } catch (Throwable $e) {
