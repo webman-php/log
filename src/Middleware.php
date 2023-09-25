@@ -55,7 +55,7 @@ class Middleware implements MiddlewareInterface
         if (!$initialized_think_orm) {
             try {
                 ThinkDb::setLog(function ($type, $log) {
-                    Context::get()->webmanLogs .= "[SQL]\t" . trim($log) . PHP_EOL;
+                    Context::get()->webmanLogs = (Context::get()->webmanLogs ?? '') . "[SQL]\t" . trim($log) . PHP_EOL;
                 });
             } catch (Throwable $e) {}
             $initialized_think_orm = true;
@@ -68,7 +68,7 @@ class Middleware implements MiddlewareInterface
         if ($request->method() === 'POST') {
             $logs .= "[POST]\t" . var_export($request->post(), true) . PHP_EOL;
         }
-        $logs .= Context::get()->webmanLogs;
+        $logs = $logs . (Context::get()->webmanLogs ?? '');
 
         // think-orm如果被使用，则记录think-orm的日志
         if ($loaded_think_db = (class_exists(ThinkDb::class, false) && class_exists(Mysql::class, false))) {
@@ -165,7 +165,7 @@ class Middleware implements MiddlewareInterface
                 try {
                     $log = vsprintf($sql, $query->bindings);
                 } catch (\Throwable $e) {}
-                Context::get()->webmanLogs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
+                Context::get()->webmanLogs = (Context::get()->webmanLogs ?? '') . "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
             });
             $capsule->setEventDispatcher($dispatcher);
         } catch (\Throwable $e) {
@@ -198,7 +198,7 @@ class Middleware implements MiddlewareInterface
                             $item = implode('\', \'', $item);
                         }
                     }
-                    Context::get()->webmanLogs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
+                    Context::get()->webmanLogs = (Context::get()->webmanLogs ?? '') . "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                 });
                 $listened_names[$name] = $name;
                 $new_names[] = $name;
