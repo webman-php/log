@@ -7,6 +7,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Redis\Events\CommandExecuted;
+use support\Context;
 use Webman\Http\Request;
 use Webman\Http\Response;
 use Webman\MiddlewareInterface;
@@ -22,10 +23,6 @@ use think\Container as ThinkContainer;
 
 class Middleware implements MiddlewareInterface
 {
-    /**
-     * @var string
-     */
-    public static $logs = '';
 
     /**
      * @param Request $request
@@ -34,14 +31,14 @@ class Middleware implements MiddlewareInterface
      */
     public function process(Request $request, callable $next): Response
     {
-        static $initialized_db;
+        static $initialized_db, $initialized_think_orm;
 
         // 请求开始时间
         $start_time = microtime(true);
 
         // 记录ip 请求等信息
         $logs = $request->getRealIp() . ' ' . $request->method() . ' ' . trim($request->fullUrl(), '/');
-        static::$logs = '';
+        Context::get()->webmanLogs = '';
 
         // 清理think-orm的日志
         if (class_exists(ThinkDb::class, false) && class_exists(Mysql::class, false)) {
@@ -54,6 +51,16 @@ class Middleware implements MiddlewareInterface
             $this->initDbListen();
         }
 
+        // 初始化think-orm日志监听
+        if (!$initialized_think_orm) {
+            try {
+                ThinkDb::setLog(function ($type, $log) {
+                    Context::get()->webmanLogs .= "[SQL]\t" . trim($log) . PHP_EOL;
+                });
+            } catch (Throwable $e) {}
+            $initialized_think_orm = true;
+        }
+
         // 得到响应
         $response = $next($request);
         $time_diff = substr((microtime(true) - $start_time) * 1000, 0, 7);
@@ -61,7 +68,7 @@ class Middleware implements MiddlewareInterface
         if ($request->method() === 'POST') {
             $logs .= "[POST]\t" . var_export($request->post(), true) . PHP_EOL;
         }
-        $logs .= static::$logs;
+        $logs .= Context::get()->webmanLogs;
 
         // think-orm如果被使用，则记录think-orm的日志
         if ($loaded_think_db = (class_exists(ThinkDb::class, false) && class_exists(Mysql::class, false))) {
@@ -158,7 +165,7 @@ class Middleware implements MiddlewareInterface
                 try {
                     $log = vsprintf($sql, $query->bindings);
                 } catch (\Throwable $e) {}
-                static::$logs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
+                Context::get()->webmanLogs .= "[SQL]\t[connection:{$query->connectionName}] $log [{$query->time} ms]" . PHP_EOL;
             });
             $capsule->setEventDispatcher($dispatcher);
         } catch (\Throwable $e) {
@@ -191,7 +198,7 @@ class Middleware implements MiddlewareInterface
                             $item = implode('\', \'', $item);
                         }
                     }
-                    static::$logs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
+                    Context::get()->webmanLogs .= "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                 });
                 $listened_names[$name] = $name;
                 $new_names[] = $name;
