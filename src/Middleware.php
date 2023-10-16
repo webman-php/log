@@ -142,6 +142,9 @@ class Middleware implements MiddlewareInterface
         }
         try {
             $capsule = $this->getCapsule();
+            if (!$capsule) {
+                return;
+            }
             $dispatcher = $capsule->getEventDispatcher();
             if (!$dispatcher) {
                 $dispatcher = new Dispatcher(new Container);
