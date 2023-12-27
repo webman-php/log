@@ -33,6 +33,15 @@ class Middleware implements MiddlewareInterface
     {
         static $initialized_db, $initialized_think_orm;
 
+        $conf=config('plugin.webman.log.app');
+        if(!empty($conf['exception']['dontPath']) && is_array($conf['exception']['dontPath'])){
+            foreach ($conf['exception']['dontPath'] as $controllerPath){
+                if(strpos($request->controller.'@'.$request->action,$controllerPath)!==false){
+                    return $next($request);
+                }
+            }
+        }
+
         // 请求开始时间
         $start_time = microtime(true);
 
