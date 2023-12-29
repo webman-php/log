@@ -11,17 +11,12 @@ return [
     ],
     'dontReport' => [
         'app' => [
-            'test',
         ],
         'controller' => [
-            Test::class,
         ],
         'action' => [
-            [Test::class, 'index'],
         ],
         'path' => [
-            '/test',
-            '/test/echo'
         ]
     ]
 ];
