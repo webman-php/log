@@ -34,9 +34,31 @@ class Middleware implements MiddlewareInterface
         static $initialized_db, $initialized_think_orm;
 
         $conf=config('plugin.webman.log.app');
-        if(!empty($conf['exception']['dontPath']) && is_array($conf['exception']['dontPath'])){
-            foreach ($conf['exception']['dontPath'] as $controllerPath){
-                if(strpos($request->controller.'@'.$request->action,$controllerPath)!==false){
+
+        //跳过配置的模块
+        if(!empty($conf['dontReport']['app']) && is_array($conf['dontReport']['app']) && in_array($request->app,$conf['dontReport']['app'],true)){
+            return $next($request);
+        }
+
+        //跳过配置的path
+        if(!empty($conf['dontReport']['path']) && is_array($conf['dontReport']['path'])){
+            $requestPath=$request->path();
+            foreach ($conf['dontReport']['path'] as $_path){
+                if(strpos($requestPath,$_path)===0){
+                    return $next($request);
+                }
+            }
+        }
+
+        //跳过配置的控制器日志记录
+        if(!empty($conf['dontReport']['controller']) && is_array($conf['dontReport']['controller']) && in_array($request->controller,$conf['dontReport']['controller'],true)){
+            return $next($request);
+        }
+
+        //跳过配置的方法
+        if(!empty($conf['dontReport']['action']) && is_array($conf['dontReport']['action'])){
+            foreach ($conf['dontReport']['action'] as $_action){
+                if($_action[0]===$request->controller && $_action[1]===$request->action){
                     return $next($request);
                 }
             }
