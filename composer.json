@@ -4,6 +4,7 @@
   "license": "MIT",
   "description": "Webman plugin webman/log",
   "require": {
+    "workerman/webman-framework": ">=1.5.15"
   },
   "autoload": {
     "psr-4": {
