@@ -15,7 +15,7 @@
 use Webman\Log\Middleware;
 
 return [
-    '' => [
+    '@' => [
         Middleware::class
     ]
 ];
