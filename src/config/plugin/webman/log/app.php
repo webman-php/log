@@ -10,13 +10,10 @@ return [
         ]
     ],
     'dontReport' => [
-        'app' => [
-        ],
-        'controller' => [
-        ],
-        'action' => [
-        ],
-        'path' => [
-        ]
-    ]
+        'app' => [],
+        'controller' => [],
+        'action' => [],
+        'path' => []
+    ],
+    'channel' => 'default' // 日志通道(在config/log.php里配置,默认是default)
 ];

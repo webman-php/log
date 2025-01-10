@@ -152,7 +152,7 @@ class Middleware implements MiddlewareInterface
             $logs .= "[Redis]\t[connection:{$name}] ..." . PHP_EOL;
         }
 
-        call_user_func([Log::class, $method], $logs);
+        call_user_func([Log::channel(config('plugin.webman.log.app.channel', 'default')), $method], $logs);
 
         if ($has_uncommitted_transaction) {
             throw new RuntimeException('Uncommitted transactions found');
