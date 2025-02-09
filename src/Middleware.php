@@ -168,7 +168,7 @@ class Middleware implements MiddlewareInterface
      */
     protected function initDbListen()
     {
-        if (!class_exists(QueryExecuted::class)) {
+        if (!class_exists(QueryExecuted::class) || !class_exists(Db::class)) {
             return;
         }
         try {
