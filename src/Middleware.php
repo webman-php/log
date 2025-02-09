@@ -8,6 +8,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Redis\Events\CommandExecuted;
 use support\Context;
+use think\db\PDOConnection;
 use Webman\Http\Request;
 use Webman\Http\Response;
 use Webman\MiddlewareInterface;
@@ -217,16 +218,18 @@ class Middleware implements MiddlewareInterface
      */
     protected function tryInitRedisListen(): array
     {
-        static $listened_names = [];
+        static $listened;
         if (!class_exists(CommandExecuted::class)) {
             return [];
         }
         $new_names = [];
+        $listened ??= new \WeakMap();
+        // Cache 目前无法监听 日志
         try {
             foreach (Redis::instance()->connections() ?: [] as $connection) {
                 /* @var \Illuminate\Redis\Connections\Connection $connection */
                 $name = $connection->getName();
-                if (isset($listened_names[$name])) {
+                if (isset($listened[$connection])) {
                     continue;
                 }
                 $connection->listen(function (CommandExecuted $command) {
@@ -237,7 +240,7 @@ class Middleware implements MiddlewareInterface
                     }
                     Context::get()->webmanLogs = (Context::get()->webmanLogs ?? '') . "[Redis]\t[connection:{$command->connectionName}] Redis::{$command->command}('" . implode('\', \'', $command->parameters) . "') ({$command->time} ms)" . PHP_EOL;
                 });
-                $listened_names[$name] = $name;
+                $listened[$connection] = $name;
                 $new_names[] = $name;
             }
         } catch (Throwable $e) {
@@ -250,7 +253,7 @@ class Middleware implements MiddlewareInterface
     /**
      * 获得Db的Manager
      *
-     * @return mixed
+     * @return \Webman\Database\Manager
      */
     protected function getCapsule()
     {
@@ -272,19 +275,14 @@ class Middleware implements MiddlewareInterface
     protected function checkDbUncommittedTransaction(): string
     {
         $logs = '';
-        try {
-            foreach ($this->getCapsule()->getDatabaseManager()->getConnections() as $connection) {
-                /* @var \Illuminate\Database\MySqlConnection $connection * */
-                if (\in_array($connection->getConfig('driver'), ['mysql', 'pgsql', 'sqlite', 'sqlsrv'])) {
-                    $pdo = $connection->getPdo();
-                    if ($pdo && $pdo->inTransaction()) {
-                        $connection->rollBack();
-                        $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
-                    }
+        $context = Context::get();
+        foreach ($context as $item) {
+            if ($item instanceof Connection) {
+                if ($item->transactionLevel() > 0) {
+                    $item->rollBack();
+                    $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
                 }
             }
-        } catch (Throwable $e) {
-            echo $e;
         }
         return $logs;
     }
@@ -298,34 +296,17 @@ class Middleware implements MiddlewareInterface
     {
         static $property, $manager_instance;
         $logs = '';
-        try {
-            if (!$property) {
-                if (class_exists(ThinkContainer::class, false)) {
-                    $manager_instance = ThinkContainer::getInstance()->make(DbManager::class);
-                } else {
-                    $reflect = new \ReflectionClass(ThinkDb::class);
-                    $property = $reflect->getProperty('instance');
-                    $property->setAccessible(true);
-                    $manager_instance = $property->getValue();
-                }
-                $reflect = new \ReflectionClass($manager_instance);
-                $property = $reflect->getProperty('instance');
-                $property->setAccessible(true);
-            }
-
-            $instances = $property->getValue($manager_instance);
-            foreach ($instances as $connection) {
-                /* @var \think\db\connector\Mysql $connection */
-                if (method_exists($connection, 'getPdo')) {
-                    $pdo = $connection->getPdo();
+        $context = Context::get();
+        foreach ($context as $item) {
+            if ($item instanceof PDOConnection) {
+                if (method_exists($item, 'getPdo')) {
+                    $pdo = $item->getPdo();
                     if ($pdo && $pdo->inTransaction()) {
-                        $connection->rollBack();
+                        $item->rollBack();
                         $logs .= "[ERROR]\tUncommitted transaction found and try to rollback" . PHP_EOL;
                     }
                 }
             }
-        } catch (Throwable $e) {
-            echo $e;
         }
         return $logs;
     }
