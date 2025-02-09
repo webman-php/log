@@ -17,8 +17,8 @@ use support\Db;
 use support\Log;
 use support\Redis;
 use think\db\connector\Mysql;
-use think\DbManager;
-use think\facade\Db as ThinkDb;
+use Webman\ThinkOrm\DbManager;
+use support\think\Db as ThinkDb;
 use think\Container as ThinkContainer;
 
 class Middleware implements MiddlewareInterface
@@ -178,6 +178,9 @@ class Middleware implements MiddlewareInterface
             }
             $dispatcher = $capsule->getEventDispatcher();
             if (!$dispatcher) {
+                if (!class_exists(Dispatcher::class)) {
+                    return;
+                }
                 $dispatcher = new Dispatcher(new Container);
             }
             $dispatcher->listen(QueryExecuted::class, function (QueryExecuted $query) {
