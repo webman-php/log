@@ -219,7 +219,7 @@ class Middleware implements MiddlewareInterface
     protected function tryInitRedisListen(): array
     {
         static $listened;
-        if (!class_exists(CommandExecuted::class)) {
+        if (!class_exists(CommandExecuted::class) || !class_exists(Redis::class)) {
             return [];
         }
         $new_names = [];
@@ -244,7 +244,6 @@ class Middleware implements MiddlewareInterface
                 $new_names[] = $name;
             }
         } catch (Throwable $e) {
-            echo $e;
         }
         return $new_names;
     }
