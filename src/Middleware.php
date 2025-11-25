@@ -258,9 +258,7 @@ class Middleware implements MiddlewareInterface
     {
         static $capsule;
         if (!$capsule) {
-            $reflect = new \ReflectionClass(Db::class);
-            $property = $reflect->getProperty('instance');
-            $property->setAccessible(true);
+            $property = new \ReflectionProperty(Db::class, 'instance');
             $capsule = $property->getValue();
         }
         return $capsule;
